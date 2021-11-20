@@ -2,10 +2,9 @@ package websockets
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.*
+import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT
 import org.springframework.boot.web.server.LocalServerPort
 import java.net.URI
 import java.util.concurrent.CountDownLatch
@@ -37,23 +36,23 @@ class ElizaServerTest {
         assertEquals("The doctor is in.", list[0])
     }
 
-    @Disabled
     @Test
     fun onChat() {
-        val latch = CountDownLatch(4)
+        val latch = CountDownLatch(6)
         val list = mutableListOf<String>()
 
         val client = ElizaOnOpenMessageHandlerToComplete(list, latch)
         container.connectToServer(client, URI("ws://localhost:$port/eliza"))
         latch.await()
-        // assertEquals(XXX, list.size) COMPLETE ME
-        // assertEquals(XXX, list[XXX]) COMPLETE ME
+        assertEquals(6, list.size)
+        assertEquals("Do you really think so?", list[3])
+        assertEquals("Alright then, goodbye!", list[5])
     }
 
 }
 
 @ClientEndpoint
-class ElizaOnOpenMessageHandler(private val list: MutableList<String>, private val latch: CountDownLatch)  {
+class ElizaOnOpenMessageHandler(private val list: MutableList<String>, private val latch: CountDownLatch) {
     @OnMessage
     fun onMessage(message: String) {
         list.add(message)
@@ -62,14 +61,29 @@ class ElizaOnOpenMessageHandler(private val list: MutableList<String>, private v
 }
 
 @ClientEndpoint
-class ElizaOnOpenMessageHandlerToComplete(private val list: MutableList<String>, private val latch: CountDownLatch)  {
+class ElizaOnOpenMessageHandlerToComplete(private val list: MutableList<String>, private val latch: CountDownLatch) {
+    var alreadyAnswered = false
 
     @OnMessage
-    fun onMessage(message: String, session: Session)  {
+    fun onMessage(message: String, session: Session) {
         list.add(message)
         latch.countDown()
-        // if (COMPLETE ME) {
-        //    COMPLETE ME
-        // }
+
+        if (message != "---") {
+            return
+        }
+
+        if (!alreadyAnswered) {
+            alreadyAnswered = true
+            session.basicRemote.sendText("I think you are a bot")
+        } else {
+            session.basicRemote.sendText("bye")
+        }
+    }
+
+    @OnClose
+    fun onClose(session: Session, closeReason: CloseReason) {
+        list.add(closeReason.reasonPhrase)
+        latch.countDown()
     }
 }
